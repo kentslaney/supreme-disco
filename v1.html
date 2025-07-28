@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>N-Body Kaleidoscope</title>
     <style>
         /* Basic CSS to remove default margin/padding and hide scrollbars */
@@ -49,7 +49,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
 </head>
 <body>
-    <div class="instructions display-text">Your mouse is a gravity well. <br> Scroll to change gravity. Click to reset.</div>
+    <div class="instructions display-text">Move finger or mouse to guide particles.<br>Pinch or scroll to change gravity. Double-tap or click to reset.</div>
     <div id="gravity-display" class="display-text"></div>
 
     <script>
@@ -66,11 +66,16 @@
         // A variable to cycle through hue values for vibrant colors.
         let hueValue = 0;
 
-        // The gravitational constant, controllable via mouse scroll.
+        // The gravitational constant, controllable via mouse scroll or touch pinch.
         let gravityConstant = 0.5;
 
         // A reference to the HTML element that will display the gravity value.
         let gravityDisplay;
+
+        // --- Mobile Touch Support Variables ---
+        let initialPinchDist = 0;
+        let lastTapTime = 0;
+        const doubleTapThreshold = 300; // milliseconds
 
         // The "Particle" class represents a single body in our simulation.
         class Particle {
@@ -129,9 +134,7 @@
             gravityDisplay = select('#gravity-display');
 
             // Create all the particles
-            for (let i = 0; i < numParticles; i++) {
-                particles.push(new Particle());
-            }
+            resetSimulation();
 
             background(0);
         }
@@ -142,13 +145,15 @@
             // Update the gravity display text on every frame.
             gravityDisplay.html('Gravity: ' + gravityConstant.toFixed(2));
 
-            const mouse = createVector(mouseX - width / 2, mouseY - height / 2);
+            // p5.js automatically uses the first touch point for mouseX/Y on mobile
+            const gravityWell = createVector(mouseX - width / 2, mouseY - height / 2);
+
             translate(width / 2, height / 2);
             hueValue = (hueValue + 0.5) % 360;
 
             // --- Main Simulation and Drawing Loop ---
             for (const p of particles) {
-                let gravity = p5.Vector.sub(mouse, p.pos);
+                let gravity = p5.Vector.sub(gravityWell, p.pos);
                 let distanceSq = constrain(gravity.magSq(), 100, 10000);
                 let strength = gravityConstant / distanceSq;
                 gravity.setMag(strength);
@@ -173,15 +178,8 @@
             }
         }
 
-        // This function is called by p5.js when the mouse wheel is used.
-        function mouseWheel(event) {
-            gravityConstant -= event.delta * 0.1;
-            // Return false to prevent the default browser behavior (page scrolling).
-            return false;
-        }
-
-        // Reset the simulation when the mouse is pressed.
-        function mousePressed() {
+        // A dedicated function to reset the particle system.
+        function resetSimulation() {
             particles.length = 0;
             background(0);
             for (let i = 0; i < numParticles; i++) {
@@ -189,10 +187,62 @@
             }
         }
 
+        // --- Desktop and Mobile Controls ---
+
+        // Handles mouse wheel scrolling on desktop.
+        function mouseWheel(event) {
+            gravityConstant -= event.delta * 0.01;
+            //gravityConstant = constrain(gravityConstant, -1.5, 2.5);
+            return false; // Prevent the page from scrolling.
+        }
+
+        // Handles click to reset the simulation on desktop.
+        function mousePressed() {
+            // This function is now only for desktop clicks, as touch is handled separately.
+            if (touches.length === 0) {
+                 resetSimulation();
+            }
+        }
+
+        // Handles the start of a touch gesture on mobile.
+        function touchStarted() {
+            if (touches.length === 1) {
+                // Check for double-tap
+                const currentTime = millis();
+                if (currentTime - lastTapTime < doubleTapThreshold) {
+                    resetSimulation();
+                }
+                lastTapTime = currentTime;
+            } else if (touches.length === 2) {
+                // If two fingers are down, record their initial distance for pinching.
+                initialPinchDist = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+            }
+            // Prevent default browser actions like trying to scroll.
+            return false;
+        }
+
+        // Handles finger movement on mobile.
+        function touchMoved() {
+            if (touches.length === 2) {
+                // If two fingers are moving, it's a pinch gesture.
+                const currentPinchDist = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+                const delta = currentPinchDist - initialPinchDist;
+
+                // Adjust gravity based on the change in pinch distance.
+                gravityConstant += delta * 0.01;
+                //gravityConstant = constrain(gravityConstant, -1.5, 2.5);
+
+                // Update the initial distance for the next frame to allow for continuous scaling.
+                initialPinchDist = currentPinchDist;
+            }
+            // Prevent the browser from scrolling or zooming the page on any touch drag.
+            return false;
+        }
+
         function windowResized() {
             resizeCanvas(windowWidth, windowHeight);
             background(0);
-            mousePressed();
+            resetSimulation();
         }
     </script>
 </body>
